@@ -154,7 +154,6 @@ class LanenetDetectionOperator(erdos.Operator):
             msg.timestamp, len(detected_lanes)))
         detected_lanes_stream.send(erdos.Message(msg.timestamp,
                                                  detected_lanes))
-        detected_lanes_stream.send(erdos.WatermarkMessage(msg.timestamp))
 
         # plt.figure('binary_image')
         # plt.imshow(binary_seg_image[0] * 255, cmap='gray')

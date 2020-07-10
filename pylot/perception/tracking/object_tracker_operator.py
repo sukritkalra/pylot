@@ -97,4 +97,3 @@ class ObjectTrackerOperator(erdos.Operator):
                 'Tracker failed at timestamp {}'.format(timestamp))
         obstacle_tracking_stream.send(
             ObstaclesMessage(timestamp, tracked_obstacles, 0))
-        obstacle_tracking_stream.send(erdos.WatermarkMessage(timestamp))
