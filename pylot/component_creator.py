@@ -416,7 +416,7 @@ def add_prediction(obstacles_tracking_stream,
             notify_reading_stream)
 
 
-def add_planning(goal_location, pose_stream, prediction_stream,
+def add_planning(planner, goal_location, pose_stream, prediction_stream,
                  traffic_lights_stream, lanes_stream, open_drive_stream,
                  global_trajectory_stream, time_to_decision_stream):
     """Adds planning operators.
@@ -445,7 +445,7 @@ def add_planning(goal_location, pose_stream, prediction_stream,
         pose_stream, open_drive_stream, global_trajectory_stream,
         goal_location)
 
-    waypoints_stream = pylot.operator_creator.add_planning(
+    waypoints_stream = pylot.operator_creator.add_planning(planner,
         pose_stream, prediction_stream, traffic_lights_stream, lanes_stream,
         trajectory_stream, open_drive_stream, time_to_decision_stream)
     return waypoints_stream

@@ -383,7 +383,7 @@ def add_behavior_planning(pose_stream,
     return trajectory_stream
 
 
-def add_planning(pose_stream,
+def add_planning(planner, pose_stream,
                  prediction_stream,
                  traffic_lights_stream,
                  lanes_stream,
@@ -397,7 +397,7 @@ def add_planning(pose_stream,
                                      log_file_name=FLAGS.log_file_name,
                                      csv_log_file_name=FLAGS.csv_log_file_name,
                                      profile_file_name=FLAGS.profile_file_name)
-    [waypoints_stream] = erdos.connect(PlanningOperator, op_config, [
+    [waypoints_stream] = erdos.connect(planner, op_config, [
         pose_stream, prediction_stream, traffic_lights_stream, lanes_stream,
         global_trajectory_stream, open_drive_stream, time_to_decision_stream
     ], FLAGS)

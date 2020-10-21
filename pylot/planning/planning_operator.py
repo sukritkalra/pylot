@@ -43,7 +43,7 @@ class PlanningOperator(erdos.Operator):
                  lanes_stream, route_stream, open_drive_stream,
                  time_to_decision_stream, waypoints_stream, flags):
         pose_stream.add_callback(self.on_pose_update)
-        prediction_stream.add_callback(self.on_prediction_update)
+        prediction_stream.add_callback(self._on_prediction_update)
         static_obstacles_stream.add_callback(self.on_static_obstacles_update)
         lanes_stream.add_callback(self.on_lanes_update)
         route_stream.add_callback(self.on_route)
@@ -119,10 +119,10 @@ class PlanningOperator(erdos.Operator):
         self._ego_transform = msg.data.transform
 
     @erdos.profile_method()
-    def on_prediction_update(self, msg):
+    def _on_prediction_update(self, msg):
         self._logger.debug('@{}: received prediction message'.format(
             msg.timestamp))
-        self._prediction_msgs.append(msg)
+        self._prediction_msgs.append(PredictionMessage(timestamp=msg.timestamp, predictions=self.on_prediction_update(msg)))
 
     def on_static_obstacles_update(self, msg):
         self._logger.debug('@{}: received static obstacles update'.format(

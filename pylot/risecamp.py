@@ -38,9 +38,9 @@ def start_scenario_runner():
     print("Finished setting up the scenario...")
     return scenario_runner
 
-def start_pylot():
+def start_pylot(planner):
     FLAGS(["risecamp.py", "--flagfile=configs/scenarios/risecamp.conf"])
-    main(None)
+    main(None, planner)
 
 def add_evaluation_operators(vehicle_id_stream, pose_stream, imu_stream,
                              pose_stream_for_control,
@@ -80,7 +80,7 @@ def add_spectator_camera(transform,
         vehicle_id_stream, release_sensor_stream, rgb_camera_setup)
     return (camera_stream, notify_reading_stream, rgb_camera_setup)
 
-def driver():
+def driver(planner):
     transform = pylot.utils.Transform(CENTER_CAMERA_LOCATION,
                                       pylot.utils.Rotation(pitch=-15))
     streams_to_send_top_on = []
@@ -224,7 +224,7 @@ def driver():
     goal_location = pylot.utils.Location(float(FLAGS.goal_location[0]),
                                          float(FLAGS.goal_location[1]),
                                          float(FLAGS.goal_location[2]))
-    waypoints_stream = pylot.component_creator.add_planning(
+    waypoints_stream = pylot.component_creator.add_planning(planner,
         goal_location, pose_stream, prediction_stream, traffic_lights_stream,
         lane_detection_stream, open_drive_stream, global_trajectory_stream,
         time_to_decision_loop_stream)
@@ -330,7 +330,7 @@ def visualize_camera_stream(camera_stream, pose_stream, world, node_handle, clie
             #    break
             #time.sleep(1)
 
-def main(args):
+def main(args, planner):
     # Connect an instance to the simulator to make sure that we can turn the
     # synchronous mode off after the script finishes running.
     client, world = get_world(FLAGS.simulator_host, FLAGS.simulator_port,
@@ -338,7 +338,7 @@ def main(args):
     try:
         if FLAGS.simulation_recording_file is not None:
             client.start_recorder(FLAGS.simulation_recording_file)
-        node_handle, control_display_stream, camera_visualize_stream, pose_synchronize_stream = driver()
+        node_handle, control_display_stream, camera_visualize_stream, pose_synchronize_stream = driver(planner)
         signal.signal(signal.SIGINT, shutdown)
         if pylot.flags.must_visualize():
             pylot.utils.run_visualizer_control_loop(control_display_stream)
