@@ -17,6 +17,30 @@ flags.DEFINE_list('goal_location', '234, 59, 39', 'Ego-vehicle goal location')
 # The location of the center camera relative to the ego-vehicle.
 CENTER_CAMERA_LOCATION = pylot.utils.Location(1.3, 0.0, 1.8)
 
+def start_simulator():
+    import time, subprocess
+    print("Starting the simulator...")
+    simulator = subprocess.Popen(["/home/erdos/workspace/pylot/scripts/run_simulator.sh"])
+    time.sleep(5)
+    print("Finished running the simulator...")
+
+
+def kill_simulator():
+    import subprocess
+    subprocess.call("pkill CarlaUE4", shell=True)
+    
+
+def start_scenario_runner():
+    import time, subprocess, os
+    print("Setting up the scenario... {}".format(os.getcwd()))
+    scenario_runner = subprocess.Popen(["python3", "scenario_runner.py", "--scenario", "ERDOSPedestrianBehindCar", "--reloadWorld", "--timeout", "600"], cwd="/home/erdos/workspace/scenario_runner")
+    time.sleep(5)
+    print("Finished setting up the scenario...")
+    return scenario_runner
+
+def start_pylot():
+    FLAGS(["risecamp.py", "--flagfile=configs/scenarios/risecamp.conf"])
+    main(None)
 
 def add_evaluation_operators(vehicle_id_stream, pose_stream, imu_stream,
                              pose_stream_for_control,
@@ -44,6 +68,17 @@ def add_evaluation_operators(vehicle_id_stream, pose_stream, imu_stream,
         pylot.operator_creator.add_control_evaluation(
             pose_stream_for_control, waypoints_stream_for_control)
 
+def add_spectator_camera(transform,
+                   vehicle_id_stream,
+                   release_sensor_stream,
+                   name='center_rgb_camera',
+                   fov=90):
+    from pylot.drivers.sensor_setup import RGBCameraSetup
+    rgb_camera_setup = RGBCameraSetup(name, 800, 600, transform,
+                                      fov)
+    camera_stream, notify_reading_stream = pylot.operator_creator._add_camera_driver(
+        vehicle_id_stream, release_sensor_stream, rgb_camera_setup)
+    return (camera_stream, notify_reading_stream, rgb_camera_setup)
 
 def driver():
     transform = pylot.utils.Transform(CENTER_CAMERA_LOCATION,
@@ -80,7 +115,13 @@ def driver():
     (center_camera_stream, notify_rgb_stream,
      center_camera_setup) = pylot.operator_creator.add_rgb_camera(
          transform, vehicle_id_stream, release_sensor_stream)
+    (spectator_camera_stream, notify_spectator_camera_stream,
+        spectator_camera_setup) = add_spectator_camera(
+            pylot.utils.Transform(pylot.utils.Location(-5.0, 0.0, 5.0),
+                pylot.utils.Rotation(pitch=-15)), vehicle_id_stream, release_sensor_stream)
+
     notify_streams.append(notify_rgb_stream)
+    notify_streams.append(notify_spectator_camera_stream)
     if pylot.flags.must_add_depth_camera_sensor():
         (depth_camera_stream, notify_depth_stream,
          depth_camera_setup) = pylot.operator_creator.add_depth_camera(
@@ -229,7 +270,8 @@ def driver():
                 prediction_stream, waypoints_stream, control_stream)
         streams_to_send_top_on += ingest_streams
 
-    camera_visualize_stream = erdos.ExtractStream(center_camera_stream)
+    camera_visualize_stream = erdos.ExtractStream(spectator_camera_stream)
+    pose_synchronize_camera_stream = erdos.ExtractStream(pose_stream)
 
     node_handle = erdos.run_async()
 
@@ -243,7 +285,7 @@ def driver():
         pipeline_finish_notify_stream.send(
             erdos.WatermarkMessage(erdos.Timestamp(is_top=True)))
 
-    return node_handle, control_display_stream, camera_visualize_stream
+    return node_handle, control_display_stream, camera_visualize_stream, pose_synchronize_camera_stream
 
 
 def shutdown_pylot(node_handle, client, world):
@@ -260,17 +302,33 @@ def shutdown(sig, frame):
     raise KeyboardInterrupt
 
 
-def visualize_camera_stream(camera_stream):
+def visualize_camera_stream(camera_stream, pose_stream, world, node_handle, client):
     from PIL import Image
     from ipywidgets import Output, Layout
     from IPython.display import display
+    import time
     out = Output()
     with out:
         while True:
+            pose = pose_stream.read()
+            if type(pose) is not erdos.WatermarkMessage and pose.data.transform.location.l2_distance(pylot.utils.Location(0, 0, 0)) < 0.01:
+                shutdown_pylot(node_handle, client, world)
+                break
+                
             image = camera_stream.read()
+
             if type(image) is not erdos.WatermarkMessage:
                 display(Image.fromarray(image.frame.as_rgb_numpy_array()))
                 out.clear_output(wait=True)
+            else:
+                if image.timestamp.is_top:
+                    shutdown_pylot(node_handle, client, world)
+
+            #ego_vehicle_location = ego_vehicle.get_location()
+            #if ego_vehicle_location == carla.Location(0.00, 0.00, 0.00):
+            #    shutdown_pylot(node_handle, client, world)
+            #    break
+            #time.sleep(1)
 
 def main(args):
     # Connect an instance to the simulator to make sure that we can turn the
@@ -280,11 +338,11 @@ def main(args):
     try:
         if FLAGS.simulation_recording_file is not None:
             client.start_recorder(FLAGS.simulation_recording_file)
-        node_handle, control_display_stream, camera_visualize_stream = driver()
+        node_handle, control_display_stream, camera_visualize_stream, pose_synchronize_stream = driver()
         signal.signal(signal.SIGINT, shutdown)
         if pylot.flags.must_visualize():
             pylot.utils.run_visualizer_control_loop(control_display_stream)
-        visualize_camera_stream(camera_visualize_stream)
+        visualize_camera_stream(camera_visualize_stream, pose_synchronize_stream, world, node_handle, client)
         node_handle.wait()
     except KeyboardInterrupt:
         shutdown_pylot(node_handle, client, world)
