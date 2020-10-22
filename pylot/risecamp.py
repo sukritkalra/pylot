@@ -17,29 +17,45 @@ flags.DEFINE_list('goal_location', '234, 59, 39', 'Ego-vehicle goal location')
 # The location of the center camera relative to the ego-vehicle.
 CENTER_CAMERA_LOCATION = pylot.utils.Location(1.3, 0.0, 1.8)
 
+class Simulator():
+    def __init__(self, sim_pid):
+        self.sim_pid = sim_pid
+
+    def reset(self):
+        kill_simulator()
+
+
+class Scenario():
+    def __init__(self, scenario_pid):
+        self.scenario_pid = scenario_pid
+
+    def reset(self):
+        self.scenario_pid.kill()
+
 def start_simulator():
     import time, subprocess
     print("Starting the simulator...")
     simulator = subprocess.Popen(["/home/erdos/workspace/pylot/scripts/run_simulator.sh"])
     time.sleep(5)
     print("Finished running the simulator...")
+    return Simulator(simulator)
 
 
 def kill_simulator():
     import subprocess
     subprocess.call("pkill CarlaUE4", shell=True)
-    
 
-def start_scenario_runner():
+def setup_scenario():
     import time, subprocess, os
     print("Setting up the scenario... {}".format(os.getcwd()))
-    scenario_runner = subprocess.Popen(["python3", "scenario_runner.py", "--scenario", "ERDOSPedestrianBehindCar", "--reloadWorld", "--timeout", "600"], cwd="/home/erdos/workspace/scenario_runner")
+    scenario_runner = subprocess.Popen(["python3", "scenario_runner.py", "--scenario", "ERDOSPedestrianBehindCar", "--reloadWorld", "--timeout", "6000"], cwd="/home/erdos/workspace/scenario_runner")
     time.sleep(5)
     print("Finished setting up the scenario...")
-    return scenario_runner
+    return Scenario(scenario_runner)
 
-def start_pylot(planner):
-    FLAGS(["risecamp.py", "--flagfile=configs/scenarios/risecamp.conf"])
+def start_pylot(planner, vehicle_speed=12):
+    from random import randint
+    FLAGS(["risecamp.py", "--flagfile=configs/scenarios/risecamp.conf", "--target_speed={}".format(int(vehicle_speed)), "--carla_traffic_manager_port={}".format(8000+randint(0, 100))])
     main(None, planner)
 
 def add_evaluation_operators(vehicle_id_stream, pose_stream, imu_stream,

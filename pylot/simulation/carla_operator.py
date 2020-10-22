@@ -89,10 +89,11 @@ class CarlaOperator(erdos.Operator):
                 is not None):  # noqa: W605
             # Any simulator version after 0.9.7.
             # Create a traffic manager to that auto pilot works.
-            self._traffic_manager = self._client.get_trafficmanager(
-                self._flags.carla_traffic_manager_port)
-            self._traffic_manager.set_synchronous_mode(
-                self._flags.simulator_mode == 'synchronous')
+            #self._traffic_manager = self._client.get_trafficmanager(
+            #    self._flags.carla_traffic_manager_port)
+            #self._traffic_manager.set_synchronous_mode(
+            #)    self._flags.simulator_mode == 'synchronous')
+            pass
 
         if self._flags.carla_scenario_runner:
             # Tick until 4.0 seconds time so that all synchronous scenario runs

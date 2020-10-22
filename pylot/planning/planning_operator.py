@@ -220,7 +220,10 @@ class PlanningOperator(erdos.Operator):
     def update_world(self, timestamp):
         pose_msg = self._pose_msgs.popleft()
         ego_transform = pose_msg.data.transform
-        prediction_msg = self._prediction_msgs.popleft()
+        try:
+            prediction_msg = self._prediction_msgs.popleft()
+        except IndexError:
+            prediction_msg = PredictionMessage(timestamp=pose_msg.timestamp, predictions=[])
         predictions = self.get_predictions(prediction_msg, ego_transform)
         static_obstacles_msg = self._static_obstacles_msgs.popleft()
         if len(self._lanes_msgs) > 0:

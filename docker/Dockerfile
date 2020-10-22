@@ -41,7 +41,7 @@ RUN mkdir -p /home/erdos/workspace
 RUN cd /home/erdos/workspace && git clone https://github.com/erdos-project/erdos.git && cd erdos && python3 python/setup.py install --user
 
 # Set up Pylot.
-RUN sudo apt-get install -y python3-pip libcudnn7 cuda-toolkit-10-0 ssh libqt5core5a libeigen3-dev cmake qtbase5-dev libpng16-16 libtiff5
+RUN sudo apt-get install -y python3-pip libcudnn7 cuda-toolkit-10-0 ssh libqt5core5a libeigen3-dev cmake qtbase5-dev libpng16-16 libtiff5 lsof
 # Get the Pylot directory.
 RUN cd /home/erdos/workspace && git clone https://github.com/sukritkalra/pylot.git && git fetch && git checkout risecamp
 WORKDIR /home/erdos/workspace/pylot/
