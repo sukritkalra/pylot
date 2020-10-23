@@ -9,6 +9,7 @@ import pylot.component_creator  # noqa: I100
 import pylot.operator_creator
 import pylot.utils
 from pylot.simulation.utils import get_world, set_asynchronous_mode
+from pylot.planning.planning_operator import PlanningOperator
 
 FLAGS = flags.FLAGS
 
@@ -53,9 +54,20 @@ def setup_scenario():
     print("Finished setting up the scenario...")
     return Scenario(scenario_runner)
 
-def start_pylot(planner, vehicle_speed=12):
+class SolvedPlanner(PlanningOperator):
+    def on_prediction_update(self, message):
+        return message.predictions
+
+def start_pylot(planner=SolvedPlanner, vehicle_speed=12.0, time_discretization=0.2, road_width=0.2):
     from random import randint
-    FLAGS(["risecamp.py", "--flagfile=configs/scenarios/risecamp.conf", "--target_speed={}".format(int(vehicle_speed)), "--carla_traffic_manager_port={}".format(8000+randint(0, 100))])
+    FLAGS([
+        "risecamp.py", 
+        "--flagfile=configs/scenarios/risecamp.conf", 
+        "--target_speed={}".format(float(vehicle_speed)), 
+        "--carla_traffic_manager_port={}".format(8000+randint(0, 100)),
+        "--d_road_w={}".format(float(road_width)),
+        "--dt={}".format(float(time_discretization)),
+        ])
     main(None, planner)
 
 def add_evaluation_operators(vehicle_id_stream, pose_stream, imu_stream,
