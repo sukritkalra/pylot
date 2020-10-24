@@ -436,12 +436,14 @@ def add_depth_camera(transform,
 def add_segmented_camera(transform,
                          vehicle_id_stream,
                          release_sensor_stream,
+                         height=1080,
+                         width=1920,
                          name='center_segmented_camera',
                          fov=90):
     from pylot.drivers.sensor_setup import SegmentedCameraSetup
     segmented_camera_setup = SegmentedCameraSetup(name,
-                                                  FLAGS.camera_image_width,
-                                                  FLAGS.camera_image_height,
+                                                  width,
+                                                  height,
                                                   transform, fov)
     ground_segmented_camera_stream, notify_reading_stream = _add_camera_driver(
         vehicle_id_stream, release_sensor_stream, segmented_camera_setup)

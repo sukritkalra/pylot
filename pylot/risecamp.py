@@ -48,7 +48,7 @@ def kill_simulator():
 
 def setup_scenario():
     import time, subprocess, os
-    print("Setting up the scenario... {}".format(os.getcwd()))
+    print("Setting up the scenario... ")
     scenario_runner = subprocess.Popen(["python3", "scenario_runner.py", "--scenario", "ERDOSPedestrianBehindCar", "--reloadWorld", "--timeout", "6000"], cwd="/home/erdos/workspace/scenario_runner")
     time.sleep(5)
     print("Finished setting up the scenario...")
@@ -102,7 +102,7 @@ def add_spectator_camera(transform,
                    name='center_rgb_camera',
                    fov=90):
     from pylot.drivers.sensor_setup import RGBCameraSetup
-    rgb_camera_setup = RGBCameraSetup(name, 800, 600, transform,
+    rgb_camera_setup = RGBCameraSetup(name, 480, 480, transform,
                                       fov)
     camera_stream, notify_reading_stream = pylot.operator_creator._add_camera_driver(
         vehicle_id_stream, release_sensor_stream, rgb_camera_setup)
@@ -300,6 +300,7 @@ def driver(planner):
 
     camera_visualize_stream = erdos.ExtractStream(spectator_camera_stream)
     pose_synchronize_camera_stream = erdos.ExtractStream(pose_stream)
+    top_down_visualize_stream = erdos.ExtractStream(prediction_camera_stream)
 
     node_handle = erdos.run_async()
 
@@ -313,7 +314,7 @@ def driver(planner):
         pipeline_finish_notify_stream.send(
             erdos.WatermarkMessage(erdos.Timestamp(is_top=True)))
 
-    return node_handle, control_display_stream, camera_visualize_stream, pose_synchronize_camera_stream
+    return node_handle, control_display_stream, camera_visualize_stream, pose_synchronize_camera_stream, top_down_visualize_stream
 
 
 def shutdown_pylot(node_handle, client, world):
@@ -330,11 +331,12 @@ def shutdown(sig, frame):
     raise KeyboardInterrupt
 
 
-def visualize_camera_stream(camera_stream, pose_stream, world, node_handle, client):
+def visualize_camera_stream(camera_stream, pose_stream, top_down_visualize_stream, world, node_handle, client):
     from PIL import Image
     from ipywidgets import Output, Layout
     from IPython.display import display
     import time
+    import numpy as np
     out = Output()
     with out:
         while True:
@@ -344,9 +346,12 @@ def visualize_camera_stream(camera_stream, pose_stream, world, node_handle, clie
                 break
                 
             image = camera_stream.read()
+            top_down_image = top_down_visualize_stream.read()
 
-            if type(image) is not erdos.WatermarkMessage:
-                display(Image.fromarray(image.frame.as_rgb_numpy_array()))
+            #print("Shape of image: {}, top_down_image: {}".format(image.frame.as_rgb_numpy_array().shape, top_down_image.frame.as_cityscapes_palette().shape))
+
+            if type(image) is not erdos.WatermarkMessage and type(top_down_image) is not erdos.WatermarkMessage:
+                display(Image.fromarray(np.concatenate((image.frame.as_rgb_numpy_array(), top_down_image.frame.as_cityscapes_palette()), axis=1)))
                 out.clear_output(wait=True)
             else:
                 if image.timestamp.is_top:
@@ -366,11 +371,11 @@ def main(args, planner):
     try:
         if FLAGS.simulation_recording_file is not None:
             client.start_recorder(FLAGS.simulation_recording_file)
-        node_handle, control_display_stream, camera_visualize_stream, pose_synchronize_stream = driver(planner)
+        node_handle, control_display_stream, camera_visualize_stream, pose_synchronize_stream, top_down_visualize_stream = driver(planner)
         signal.signal(signal.SIGINT, shutdown)
         if pylot.flags.must_visualize():
             pylot.utils.run_visualizer_control_loop(control_display_stream)
-        visualize_camera_stream(camera_visualize_stream, pose_synchronize_stream, world, node_handle, client)
+        visualize_camera_stream(camera_visualize_stream, pose_synchronize_stream, top_down_visualize_stream, world, node_handle, client)
         node_handle.wait()
     except KeyboardInterrupt:
         shutdown_pylot(node_handle, client, world)

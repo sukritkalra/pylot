@@ -399,7 +399,7 @@ def add_prediction(obstacles_tracking_stream,
             assert pose_stream is not None
             pylot.operator_creator.add_prediction_evaluation(
                 pose_stream, obstacles_tracking_stream, prediction_stream)
-        if FLAGS.visualize_prediction:
+        if True:
             # Add bird's eye camera.
             top_down_transform = pylot.utils.get_top_down_transform(
                 camera_transform, FLAGS.top_down_camera_altitude)
@@ -410,6 +410,8 @@ def add_prediction(obstacles_tracking_stream,
                     top_down_transform,
                     vehicle_id_stream,
                     release_sensor_stream,
+                    width=480,
+                    height=480,
                     name='top_down_segmented_camera',
                     fov=90)
     return (prediction_stream, top_down_segmented_camera_stream,
