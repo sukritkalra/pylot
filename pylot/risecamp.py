@@ -49,7 +49,7 @@ def kill_simulator():
 def setup_scenario():
     import time, subprocess, os
     print("Setting up the scenario... ")
-    scenario_runner = subprocess.Popen(["python3", "scenario_runner.py", "--scenario", "ERDOSPedestrianBehindCar", "--reloadWorld", "--timeout", "6000"], cwd="/home/erdos/workspace/scenario_runner")
+    scenario_runner = subprocess.Popen(["python3", "scenario_runner.py", "--scenario", "ERDOSPedestrianBehindCar", "--reloadWorld", "--output", "--timeout", "6000"], cwd="/home/erdos/workspace/scenario_runner")
     time.sleep(5)
     print("Finished setting up the scenario...")
     return Scenario(scenario_runner)
@@ -60,6 +60,7 @@ class SolvedPlanner(PlanningOperator):
 
 def start_pylot(planner=SolvedPlanner, vehicle_speed=12.0, time_discretization=0.2, road_width=0.2):
     from random import randint
+    filename = 'video-{}.mp4'.format(randint(1, 1000))
     FLAGS([
         "risecamp.py", 
         "--flagfile=configs/scenarios/risecamp.conf", 
@@ -68,7 +69,8 @@ def start_pylot(planner=SolvedPlanner, vehicle_speed=12.0, time_discretization=0
         "--d_road_w={}".format(float(road_width)),
         "--dt={}".format(float(time_discretization)),
         ])
-    main(None, planner)
+    main(None, planner, filename)
+    return filename
 
 def add_evaluation_operators(vehicle_id_stream, pose_stream, imu_stream,
                              pose_stream_for_control,
@@ -301,6 +303,9 @@ def driver(planner):
     camera_visualize_stream = erdos.ExtractStream(spectator_camera_stream)
     pose_synchronize_camera_stream = erdos.ExtractStream(pose_stream)
     top_down_visualize_stream = erdos.ExtractStream(prediction_camera_stream)
+    prediction_stream_ex = erdos.ExtractStream(prediction_stream)
+    traffic_lights_stream_ex = erdos.ExtractStream(traffic_lights_stream)
+    waypoints_stream_ex = erdos.ExtractStream(waypoints_stream)
 
     node_handle = erdos.run_async()
 
@@ -314,7 +319,16 @@ def driver(planner):
         pipeline_finish_notify_stream.send(
             erdos.WatermarkMessage(erdos.Timestamp(is_top=True)))
 
-    return node_handle, control_display_stream, camera_visualize_stream, pose_synchronize_camera_stream, top_down_visualize_stream
+    return (
+            node_handle, 
+            control_display_stream, 
+            camera_visualize_stream, 
+            pose_synchronize_camera_stream, 
+            top_down_visualize_stream,
+            prediction_stream_ex,
+            traffic_lights_stream_ex,
+            waypoints_stream_ex,
+            )
 
 
 def shutdown_pylot(node_handle, client, world):
@@ -331,27 +345,48 @@ def shutdown(sig, frame):
     raise KeyboardInterrupt
 
 
-def visualize_camera_stream(camera_stream, pose_stream, top_down_visualize_stream, world, node_handle, client):
+def visualize_camera_stream(camera_stream, pose_stream, top_down_visualize_stream, 
+        prediction_stream, traffic_lights_stream, waypoints_stream, world, node_handle, client, filename):
     from PIL import Image
     from ipywidgets import Output, Layout
-    from IPython.display import display
-    import time
+    from IPython.display import display, Video
+    import time, erdos, random, cv2
     import numpy as np
+    from pylot.planning.world import World
     out = Output()
+    logger = erdos.utils.setup_logging("visualizer", None)
+    planning_world = World(FLAGS, logger)
+    fourcc = cv2.VideoWriter_fourcc(*'MP4V')
+    video = cv2.VideoWriter(filename, fourcc, 25, (960, 480))
     with out:
         while True:
             pose = pose_stream.read()
             if type(pose) is not erdos.WatermarkMessage and pose.data.transform.location.l2_distance(pylot.utils.Location(0, 0, 0)) < 0.01:
                 shutdown_pylot(node_handle, client, world)
+                video.release()
                 break
                 
             image = camera_stream.read()
             top_down_image = top_down_visualize_stream.read()
+            prediction_msg = prediction_stream.read()
+            traffic_lights_msg = traffic_lights_stream.read()
+            waypoint_msg = waypoints_stream.read()
 
-            #print("Shape of image: {}, top_down_image: {}".format(image.frame.as_rgb_numpy_array().shape, top_down_image.frame.as_cityscapes_palette().shape))
+            if type(image) is not erdos.WatermarkMessage and type(top_down_image) is not erdos.WatermarkMessage \
+                    and type(pose) is not erdos.WatermarkMessage and type(prediction_msg) is not erdos.WatermarkMessage \
+                    and type(traffic_lights_msg) is not erdos.WatermarkMessage:
+                # Get the top down image.
+                top_down_image.frame.transform_to_cityscapes()
+                planning_world.update(image.timestamp, pose.data, prediction_msg.predictions, traffic_lights_msg.obstacles, None, None)
+                planning_world.update_waypoints(None, waypoint_msg.waypoints)
+                planning_world.draw_on_frame(top_down_image.frame)
 
-            if type(image) is not erdos.WatermarkMessage and type(top_down_image) is not erdos.WatermarkMessage:
-                display(Image.fromarray(np.concatenate((image.frame.as_rgb_numpy_array(), top_down_image.frame.as_cityscapes_palette()), axis=1)))
+                # Get the speed on the image.
+                #image.frame.draw_text(Vector2D(10, 10), "Speed: {:.1}m/s".format(pose.data.forward_speed))
+
+                image_array = np.concatenate((image.frame.as_rgb_numpy_array(), top_down_image.frame.as_cityscapes_palette()), axis=1)
+                display(Image.fromarray(image_array))
+                video.write(cv2.cvtColor(image_array, cv2.COLOR_RGB2BGR))
                 out.clear_output(wait=True)
             else:
                 if image.timestamp.is_top:
@@ -363,7 +398,9 @@ def visualize_camera_stream(camera_stream, pose_stream, top_down_visualize_strea
             #    break
             #time.sleep(1)
 
-def main(args, planner):
+    out.clear_output()
+
+def main(args, planner, filename):
     # Connect an instance to the simulator to make sure that we can turn the
     # synchronous mode off after the script finishes running.
     client, world = get_world(FLAGS.simulator_host, FLAGS.simulator_port,
@@ -371,11 +408,24 @@ def main(args, planner):
     try:
         if FLAGS.simulation_recording_file is not None:
             client.start_recorder(FLAGS.simulation_recording_file)
-        node_handle, control_display_stream, camera_visualize_stream, pose_synchronize_stream, top_down_visualize_stream = driver(planner)
+        (node_handle, 
+                control_display_stream, 
+                camera_visualize_stream, 
+                pose_synchronize_stream, 
+                top_down_visualize_stream, 
+                prediction_stream,
+                traffic_lights_stream,
+                waypoints_stream) = driver(planner)
         signal.signal(signal.SIGINT, shutdown)
         if pylot.flags.must_visualize():
             pylot.utils.run_visualizer_control_loop(control_display_stream)
-        visualize_camera_stream(camera_visualize_stream, pose_synchronize_stream, top_down_visualize_stream, world, node_handle, client)
+        visualize_camera_stream(camera_visualize_stream, 
+                pose_synchronize_stream, 
+                top_down_visualize_stream, 
+                prediction_stream, 
+                traffic_lights_stream,
+                waypoints_stream,
+                world, node_handle, client, filename)
         node_handle.wait()
     except KeyboardInterrupt:
         shutdown_pylot(node_handle, client, world)
