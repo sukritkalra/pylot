@@ -58,7 +58,7 @@ class SolvedPlanner(PlanningOperator):
     def on_prediction_update(self, message):
         return message.predictions
 
-def start_pylot(planner=SolvedPlanner, vehicle_speed=12.0, time_discretization=0.2, road_width=0.2):
+def start_pylot(planner=SolvedPlanner, vehicle_speed=12.0, time_discretization=0.35, road_width=0.35):
     from random import randint
     filename = 'video-{}.mp4'.format(randint(1, 1000))
     FLAGS([
